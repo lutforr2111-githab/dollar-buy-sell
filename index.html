@@ -1,0 +1,2141 @@
+
+import { useAuth } from '../context/AuthContext.tsx';
+import {
+  Users,
+  CreditCard,
+  Coins,
+  Network,
+  Wallet,
+  ArrowDownUp,
+  Download,
+  Settings,
+  Send,
+  Shield,
+  FileText,
+  Search,
+  Check,
+  X,
+  AlertTriangle,
+  Archive,
+  Trash2,
+  Plus,
+  Edit,
+  RefreshCw,
+  Eye,
+  Sliders,
+  DollarSign,
+  TrendingUp,
+  Lock,
+  Activity,
+  Layers,
+  Save,
+  CheckCircle2,
+  Sparkles,
+} from 'lucide-react';
+import {
+  Transaction,
+  FiatCurrency,
+  Cryptocurrency,
+  BlockchainNetwork,
+  PaymentMethod,
+  AdminStats,
+  PlatformSettings,
+} from '../types/index.ts';
+import { UnifiedCurrencyHub } from './UnifiedCurrencyHub.tsx';
+
+interface AdminPanelProps {
+  onRefreshData: () => void;
+  platformSettings: PlatformSettings | null;
+}
+
+export const AdminPanel: React.FC<AdminPanelProps> = ({
+  onRefreshData,
+  platformSettings,
+}) => {
+  const { user, token } = useAuth();
+
+  // Active section (0 = Unified Hub, 1 to 16 = other modules)
+  const [section, setSection] = useState<number>(0);
+
+  // Stats
+  const [stats, setStats] = useState<AdminStats | null>(null);
+
+  // Core Data Lists
+  const [transactions, setTransactions] = useState<Transaction[]>([]);
+  const [usersList, setUsersList] = useState<any[]>([]);
+  const [fiats, setFiats] = useState<FiatCurrency[]>([]);
+  const [cryptos, setCryptos] = useState<Cryptocurrency[]>([]);
+  const [networks, setNetworks] = useState<BlockchainNetwork[]>([]);
+  const [paymentMethods, setPaymentMethods] = useState<PaymentMethod[]>([]);
+  const [activityLogs, setActivityLogs] = useState<any[]>([]);
+
+  // Search & Filter state for Transactions
+  const [searchQuery, setSearchQuery] = useState<string>('');
+  const [filterType, setFilterType] = useState<string>('ALL');
+  const [filterStatus, setFilterStatus] = useState<string>('ALL');
+  const [filterCurrency, setFilterCurrency] = useState<string>('ALL');
+  const [filterArchived, setFilterArchived] = useState<string>('false');
+
+  // Loading
+  const [loading, setLoading] = useState<boolean>(true);
+
+  // Modals state for transactions
+  const [selectedTxn, setSelectedTxn] = useState<Transaction | null>(null);
+  const [rejectModalOpen, setRejectModalOpen] = useState<boolean>(false);
+  const [rejectionReason, setRejectionReason] = useState<string>('');
+  const [approveModalOpen, setApproveModalOpen] = useState<boolean>(false);
+  const [approvalNotes, setApprovalNotes] = useState<string>('');
+
+  // Modals & State for FIAT Currency Value Changing
+  const [fiatModalOpen, setFiatModalOpen] = useState<boolean>(false);
+  const [fiatModalMode, setFiatModalMode] = useState<'add' | 'edit'>('edit');
+  const [fiatFormData, setFiatFormData] = useState({
+    id: 0,
+    code: '',
+    name: '',
+    symbol: '',
+    buyRate: '',
+    sellRate: '',
+    minLimit: '',
+    maxLimit: '',
+    transactionFee: '',
+    reserveAmount: '',
+    isEnabled: true,
+  });
+
+  // Modals & State for CRYPTO Currency Value Changing
+  const [cryptoModalOpen, setCryptoModalOpen] = useState<boolean>(false);
+  const [cryptoModalMode, setCryptoModalMode] = useState<'add' | 'edit'>('edit');
+  const [cryptoFormData, setCryptoFormData] = useState({
+    id: 0,
+    symbol: '',
+    name: '',
+    logoUrl: '',
+    buyPrice: '',
+    sellPrice: '',
+    feePercentage: '',
+    minLimit: '',
+    maxLimit: '',
+    reserveAmount: '',
+    isEnabled: true,
+    depositEnabled: true,
+    withdrawalEnabled: true,
+  });
+
+  // Inline Quick Rate Change States for Section 11
+  const [quickRatesFiat, setQuickRatesFiat] = useState<Record<string, { buyRate: string; sellRate: string; reserveAmount: string }>>({});
+  const [quickRatesCrypto, setQuickRatesCrypto] = useState<Record<string, { buyPrice: string; sellPrice: string; feePercentage: string; reserveAmount: string }>>({});
+  const [rateUpdatedSuccess, setRateUpdatedSuccess] = useState<string | null>(null);
+
+  // Dynamic Settings inputs
+  const [siteName, setSiteName] = useState<string>(platformSettings?.siteName || 'DOLLAREXCHANGEBD');
+  const [siteTagline, setSiteTagline] = useState<string>(platformSettings?.tagline || '');
+  const [telegramUsername, setTelegramUsername] = useState<string>(platformSettings?.telegramUsername || '@DollarExchangeBD_Support');
+  const [telegramUrl, setTelegramUrl] = useState<string>(platformSettings?.telegramUrl || 'https://t.me/DollarExchangeBD_Support');
+  const [telegramAvailability, setTelegramAvailability] = useState<string>(platformSettings?.telegramAvailability || '');
+  const [siteNotice, setSiteNotice] = useState<string>(platformSettings?.notice || '');
+  const [settingsSaved, setSettingsSaved] = useState<boolean>(false);
+
+  // Flash message for fiat/crypto updates
+  const [actionSuccessMsg, setActionSuccessMsg] = useState<string | null>(null);
+
+  // Fetch admin stats & initial lists
+  const fetchStats = async () => {
+    try {
+      const res = await fetch('/api/admin/stats', {
+        headers: { Authorization: `Bearer ${token}` },
+      });
+      if (res.ok) {
+        const data = await res.json();
+        setStats(data);
+      }
+    } catch (err) {
+      console.error('Failed to load admin stats:', err);
+    }
+  };
+
+  const fetchTransactions = async () => {
+    try {
+      const res = await fetch(
+        `/api/admin/transactions?search=${encodeURIComponent(searchQuery)}&type=${filterType}&status=${filterStatus}&currency=${filterCurrency}&archived=${filterArchived}`,
+        {
+          headers: { Authorization: `Bearer ${token}` },
+        }
+      );
+      if (res.ok) {
+        const data = await res.json();
+        setTransactions(data);
+      }
+    } catch (err) {
+      console.error('Failed to load admin transactions:', err);
+    }
+  };
+
+  const fetchUsers = async () => {
+    try {
+      const res = await fetch('/api/admin/users', {
+        headers: { Authorization: `Bearer ${token}` },
+      });
+      if (res.ok) {
+        const data = await res.json();
+        setUsersList(data);
+      }
+    } catch (err) {
+      console.error('Failed to load users:', err);
+    }
+  };
+
+  const fetchCurrenciesAndNetworks = async () => {
+    try {
+      const [currRes, netRes, payRes] = await Promise.all([
+        fetch('/api/currencies'),
+        fetch('/api/networks'),
+        fetch('/api/payment-methods'),
+      ]);
+      if (currRes.ok) {
+        const d = await currRes.json();
+        setFiats(d.fiats || []);
+        setCryptos(d.cryptos || []);
+
+        // Initialize quick rate state maps
+        const fiatMap: Record<string, any> = {};
+        (d.fiats || []).forEach((f: FiatCurrency) => {
+          fiatMap[f.id] = {
+            buyRate: f.buyRate,
+            sellRate: f.sellRate,
+            reserveAmount: f.reserveAmount,
+          };
+        });
+        setQuickRatesFiat(fiatMap);
+
+        const cryptoMap: Record<string, any> = {};
+        (d.cryptos || []).forEach((c: Cryptocurrency) => {
+          cryptoMap[c.id] = {
+            buyPrice: c.buyPrice,
+            sellPrice: c.sellPrice,
+            feePercentage: c.feePercentage,
+            reserveAmount: c.reserveAmount,
+          };
+        });
+        setQuickRatesCrypto(cryptoMap);
+      }
+      if (netRes.ok) {
+        const d = await netRes.json();
+        setNetworks(d || []);
+      }
+      if (payRes.ok) {
+        const d = await payRes.json();
+        setPaymentMethods(d || []);
+      }
+    } catch (err) {
+      console.error('Failed to load currencies/networks:', err);
+    }
+  };
+
+  const fetchActivityLogs = async () => {
+    try {
+      const res = await fetch('/api/admin/activity-logs', {
+        headers: { Authorization: `Bearer ${token}` },
+      });
+      if (res.ok) {
+        const data = await res.json();
+        setActivityLogs(data);
+      }
+    } catch (err) {
+      console.error('Failed to load logs:', err);
+    }
+  };
+
+  useEffect(() => {
+    setLoading(true);
+    Promise.all([
+      fetchStats(),
+      fetchTransactions(),
+      fetchUsers(),
+      fetchCurrenciesAndNetworks(),
+      fetchActivityLogs(),
+    ]).finally(() => {
+      setLoading(false);
+    });
+  }, [token, searchQuery, filterType, filterStatus, filterCurrency, filterArchived]);
+
+  // Transaction Actions
+  const handleApprove = async () => {
+    if (!selectedTxn) return;
+    try {
+      const res = await fetch(`/api/admin/transactions/${selectedTxn.id}/approve`, {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+          Authorization: `Bearer ${token}`,
+        },
+        body: JSON.stringify({ adminNotes: approvalNotes }),
+      });
+      if (res.ok) {
+        setApproveModalOpen(false);
+        setSelectedTxn(null);
+        setApprovalNotes('');
+        await fetchTransactions();
+        await fetchStats();
+        onRefreshData();
+      }
+    } catch {
+      alert('Failed to approve transaction');
+    }
+  };
+
+  const handleReject = async () => {
+    if (!selectedTxn) return;
+    if (!rejectionReason.trim()) {
+      alert('Please provide a rejection reason for the customer.');
+      return;
+    }
+    try {
+      const res = await fetch(`/api/admin/transactions/${selectedTxn.id}/reject`, {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+          Authorization: `Bearer ${token}`,
+        },
+        body: JSON.stringify({ reason: rejectionReason }),
+      });
+      if (res.ok) {
+        setRejectModalOpen(false);
+        setSelectedTxn(null);
+        setRejectionReason('');
+        await fetchTransactions();
+        await fetchStats();
+        onRefreshData();
+      }
+    } catch {
+      alert('Failed to reject transaction');
+    }
+  };
+
+  const handleArchive = async (txnId: number, archive: boolean) => {
+    try {
+      await fetch(`/api/admin/transactions/${txnId}/archive`, {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+          Authorization: `Bearer ${token}`,
+        },
+        body: JSON.stringify({ archive }),
+      });
+      await fetchTransactions();
+    } catch {
+      alert('Archive failed');
+    }
+  };
+
+  const handleSoftDelete = async (txnId: number) => {
+    if (!confirm('Are you sure you want to soft-delete this record? The immutable audit log will remain intact for legal compliance.')) {
+      return;
+    }
+    try {
+      await fetch(`/api/admin/transactions/${txnId}/soft-delete`, {
+        method: 'POST',
+        headers: { Authorization: `Bearer ${token}` },
+      });
+      await fetchTransactions();
+      await fetchStats();
+    } catch {
+      alert('Soft delete failed');
+    }
+  };
+
+  const handleExportCSV = () => {
+    window.open('/api/admin/transactions/export', '_blank');
+  };
+
+  // ==========================================
+  // FIAT VALUE CHANGE LOGIC
+  // ==========================================
+  const handleOpenAddFiat = () => {
+    setFiatModalMode('add');
+    setFiatFormData({
+      id: 0,
+      code: '',
+      name: '',
+      symbol: '',
+      buyRate: '120.00',
+      sellRate: '118.00',
+      minLimit: '500',
+      maxLimit: '500000',
+      transactionFee: '0',
+      reserveAmount: '1000000',
+      isEnabled: true,
+    });
+    setFiatModalOpen(true);
+  };
+
+  const handleOpenEditFiat = (fiat: FiatCurrency) => {
+    setFiatModalMode('edit');
+    setFiatFormData({
+      id: fiat.id,
+      code: fiat.code,
+      name: fiat.name,
+      symbol: fiat.symbol,
+      buyRate: fiat.buyRate,
+      sellRate: fiat.sellRate,
+      minLimit: fiat.minLimit,
+      maxLimit: fiat.maxLimit,
+      transactionFee: fiat.transactionFee,
+      reserveAmount: fiat.reserveAmount,
+      isEnabled: fiat.isEnabled,
+    });
+    setFiatModalOpen(true);
+  };
+
+  const handleSaveFiatForm = async (e: React.FormEvent) => {
+    e.preventDefault();
+    try {
+      const url =
+        fiatModalMode === 'add' ? '/api/admin/fiat' : `/api/admin/fiat/${fiatFormData.id}`;
+      const method = fiatModalMode === 'add' ? 'POST' : 'PUT';
+
+      const res = await fetch(url, {
+        method,
+        headers: {
+          'Content-Type': 'application/json',
+          Authorization: `Bearer ${token}`,
+        },
+        body: JSON.stringify(fiatFormData),
+      });
+
+      if (res.ok) {
+        setFiatModalOpen(false);
+        setActionSuccessMsg(`Fiat currency ${fiatFormData.code} values updated successfully!`);
+        setTimeout(() => setActionSuccessMsg(null), 3500);
+        await fetchCurrenciesAndNetworks();
+        onRefreshData();
+      } else {
+        const err = await res.json();
+        alert(`Failed: ${err.error || 'Server error'}`);
+      }
+    } catch (err) {
+      alert('Failed to save fiat currency');
+    }
+  };
+
+  const handleToggleFiatStatus = async (fiat: FiatCurrency) => {
+    try {
+      const res = await fetch(`/api/admin/fiat/${fiat.id}`, {
+        method: 'PUT',
+        headers: {
+          'Content-Type': 'application/json',
+          Authorization: `Bearer ${token}`,
+        },
+        body: JSON.stringify({ isEnabled: !fiat.isEnabled }),
+      });
+      if (res.ok) {
+        await fetchCurrenciesAndNetworks();
+        onRefreshData();
+      }
+    } catch {
+      alert('Toggle status failed');
+    }
+  };
+
+  // Quick Inline Save for Fiat (in Section 11)
+  const handleQuickSaveFiatRate = async (fiatId: number, code: string) => {
+    const current = quickRatesFiat[fiatId];
+    if (!current) return;
+    try {
+      const res = await fetch(`/api/admin/fiat/${fiatId}`, {
+        method: 'PUT',
+        headers: {
+          'Content-Type': 'application/json',
+          Authorization: `Bearer ${token}`,
+        },
+        body: JSON.stringify({
+          buyRate: current.buyRate,
+          sellRate: current.sellRate,
+          reserveAmount: current.reserveAmount,
+        }),
+      });
+      if (res.ok) {
+        setRateUpdatedSuccess(`Rates for ${code} saved to PostgreSQL database!`);
+        setTimeout(() => setRateUpdatedSuccess(null), 3000);
+        await fetchCurrenciesAndNetworks();
+        onRefreshData();
+      }
+    } catch {
+      alert('Failed to save rates');
+    }
+  };
+
+  // ==========================================
+  // CRYPTO VALUE CHANGE LOGIC
+  // ==========================================
+  const handleOpenAddCrypto = () => {
+    setCryptoModalMode('add');
+    setCryptoFormData({
+      id: 0,
+      symbol: '',
+      name: '',
+      logoUrl: '',
+      buyPrice: '1.00',
+      sellPrice: '0.99',
+      feePercentage: '0.50',
+      minLimit: '10',
+      maxLimit: '20000',
+      reserveAmount: '50000',
+      isEnabled: true,
+      depositEnabled: true,
+      withdrawalEnabled: true,
+    });
+    setCryptoModalOpen(true);
+  };
+
+  const handleOpenEditCrypto = (crypto: Cryptocurrency) => {
+    setCryptoModalMode('edit');
+    setCryptoFormData({
+      id: crypto.id,
+      symbol: crypto.symbol,
+      name: crypto.name,
+      logoUrl: crypto.logoUrl || '',
+      buyPrice: crypto.buyPrice,
+      sellPrice: crypto.sellPrice,
+      feePercentage: crypto.feePercentage,
+      minLimit: crypto.minLimit,
+      maxLimit: crypto.maxLimit,
+      reserveAmount: crypto.reserveAmount,
+      isEnabled: crypto.isEnabled,
+      depositEnabled: crypto.depositEnabled,
+      withdrawalEnabled: crypto.withdrawalEnabled,
+    });
+    setCryptoModalOpen(true);
+  };
+
+  const handleSaveCryptoForm = async (e: React.FormEvent) => {
+    e.preventDefault();
+    try {
+      const url =
+        cryptoModalMode === 'add' ? '/api/admin/crypto' : `/api/admin/crypto/${cryptoFormData.id}`;
+      const method = cryptoModalMode === 'add' ? 'POST' : 'PUT';
+
+      const res = await fetch(url, {
+        method,
+        headers: {
+          'Content-Type': 'application/json',
+          Authorization: `Bearer ${token}`,
+        },
+        body: JSON.stringify(cryptoFormData),
+      });
+
+      if (res.ok) {
+        setCryptoModalOpen(false);
+        setActionSuccessMsg(`Cryptocurrency ${cryptoFormData.symbol} prices and reserves updated successfully!`);
+        setTimeout(() => setActionSuccessMsg(null), 3500);
+        await fetchCurrenciesAndNetworks();
+        onRefreshData();
+      } else {
+        const err = await res.json();
+        alert(`Failed: ${err.error || 'Server error'}`);
+      }
+    } catch {
+      alert('Failed to save cryptocurrency');
+    }
+  };
+
+  const handleToggleCryptoStatus = async (crypto: Cryptocurrency) => {
+    try {
+      const res = await fetch(`/api/admin/crypto/${crypto.id}`, {
+        method: 'PUT',
+        headers: {
+          'Content-Type': 'application/json',
+          Authorization: `Bearer ${token}`,
+        },
+        body: JSON.stringify({ isEnabled: !crypto.isEnabled }),
+      });
+      if (res.ok) {
+        await fetchCurrenciesAndNetworks();
+        onRefreshData();
+      }
+    } catch {
+      alert('Toggle crypto status failed');
+    }
+  };
+
+  // Quick Inline Save for Crypto (in Section 11)
+  const handleQuickSaveCryptoPrice = async (cryptoId: number, symbol: string) => {
+    const current = quickRatesCrypto[cryptoId];
+    if (!current) return;
+    try {
+      const res = await fetch(`/api/admin/crypto/${cryptoId}`, {
+        method: 'PUT',
+        headers: {
+          'Content-Type': 'application/json',
+          Authorization: `Bearer ${token}`,
+        },
+        body: JSON.stringify({
+          buyPrice: current.buyPrice,
+          sellPrice: current.sellPrice,
+          feePercentage: current.feePercentage,
+          reserveAmount: current.reserveAmount,
+        }),
+      });
+      if (res.ok) {
+        setRateUpdatedSuccess(`Prices for ${symbol} saved to PostgreSQL database!`);
+        setTimeout(() => setRateUpdatedSuccess(null), 3000);
+        await fetchCurrenciesAndNetworks();
+        onRefreshData();
+      }
+    } catch {
+      alert('Failed to save prices');
+    }
+  };
+
+  // Save Settings
+  const handleSaveSettings = async (e: React.FormEvent) => {
+    e.preventDefault();
+    try {
+      const res = await fetch('/api/admin/settings', {
+        method: 'PUT',
+        headers: {
+          'Content-Type': 'application/json',
+          Authorization: `Bearer ${token}`,
+        },
+        body: JSON.stringify({
+          site_name: siteName,
+          site_tagline: siteTagline,
+          telegram_username: telegramUsername,
+          telegram_url: telegramUrl,
+          telegram_availability: telegramAvailability,
+          site_notice: siteNotice,
+        }),
+      });
+      if (res.ok) {
+        setSettingsSaved(true);
+        setTimeout(() => setSettingsSaved(false), 3000);
+        onRefreshData();
+      }
+    } catch {
+      alert('Failed to save settings');
+    }
+  };
+
+  // Sections navigation mapping
+  const navSections = [
+    { id: 0, label: '⚡ Unified Currency & Network Hub', icon: Sparkles },
+    { id: 1, label: 'Overview & Statistics', icon: TrendingUp },
+    { id: 2, label: 'User Management', icon: Users },
+    { id: 3, label: 'Fiat Currency Management', icon: DollarSign },
+    { id: 4, label: 'Cryptocurrency Management', icon: Coins },
+    { id: 5, label: 'Blockchain Networks', icon: Network },
+    { id: 6, label: 'Payment Methods', icon: CreditCard },
+    { id: 7, label: 'Send Orders (Fiat → Crypto)', icon: ArrowDownUp },
+    { id: 8, label: 'Receive Orders (Crypto → Fiat)', icon: ArrowDownUp },
+    { id: 9, label: 'Deposit Management', icon: Wallet },
+    { id: 10, label: 'Withdrawal Management', icon: Send },
+    { id: 11, label: 'Exchange Rate Controls', icon: Sliders },
+    { id: 12, label: 'Transaction History (Full)', icon: FileText },
+    { id: 13, label: 'Website Settings', icon: Settings },
+    { id: 14, label: 'Telegram Support Settings', icon: Send },
+    { id: 15, label: 'Security & 2FA', icon: Shield },
+    { id: 16, label: 'Reports & CSV Analytics', icon: Activity },
+  ];
+
+  return (
+    <div className="py-8 bg-slate-900 text-white min-h-[90vh]">
+      <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8">
+        {/* Top Header */}
+        <div className="flex flex-col md:flex-row md:items-center justify-between pb-6 mb-6 border-b border-slate-800 gap-4">
+          <div>
+            <div className="flex items-center space-x-2">
+              <span className="text-xs bg-amber-500/20 text-amber-300 border border-amber-500/40 px-2 py-0.5 rounded font-mono font-bold">
+                OPERATOR ACCESS
+              </span>
+              <h1 className="text-xl sm:text-2xl font-black font-mono text-white">
+                ADMIN CONTROL PANEL
+              </h1>
+            </div>
+            <p className="text-xs text-slate-400 mt-1">
+              Full control over currencies, rates, blockchain networks, and customer transactions
+            </p>
+          </div>
+
+          <div className="flex items-center space-x-3">
+            <button
+              onClick={() => setSection(0)}
+              className={`px-3.5 py-2 rounded-xl text-xs font-bold transition flex items-center space-x-1.5 cursor-pointer ${
+                section === 0
+                  ? 'bg-gradient-to-r from-blue-600 to-sky-500 text-white shadow-lg'
+                  : 'bg-slate-800 hover:bg-slate-700 text-sky-300 border border-slate-700'
+              }`}
+            >
+              <Sparkles className="w-3.5 h-3.5 text-amber-300" />
+              <span>Unified Currency Hub</span>
+            </button>
+            <button
+              onClick={handleExportCSV}
+              className="bg-emerald-600/30 hover:bg-emerald-600 text-emerald-300 hover:text-white border border-emerald-500/40 px-3.5 py-2 rounded-xl text-xs font-bold transition flex items-center space-x-1.5 cursor-pointer"
+            >
+              <Download className="w-4 h-4" />
+              <span>Export CSV</span>
+            </button>
+            <button
+              onClick={() => {
+                fetchStats();
+                fetchTransactions();
+                fetchCurrenciesAndNetworks();
+              }}
+              className="bg-slate-800 hover:bg-slate-700 text-slate-200 border border-slate-700 px-3.5 py-2 rounded-xl text-xs font-bold transition flex items-center space-x-1.5 cursor-pointer"
+            >
+              <RefreshCw className="w-4 h-4" />
+              <span>Refresh</span>
+            </button>
+          </div>
+        </div>
+
+        {/* Global Action Success Banner */}
+        {actionSuccessMsg && (
+          <div className="mb-6 bg-emerald-500/10 border border-emerald-500/40 p-3.5 rounded-2xl flex items-center space-x-2.5 text-xs text-emerald-300 animate-fade-in font-medium">
+            <CheckCircle2 className="w-4 h-4 text-emerald-400 shrink-0" />
+            <span>{actionSuccessMsg}</span>
+          </div>
+        )}
+
+        {/* Layout Grid: 16-section Sidebar + Main Content */}
+        <div className="grid grid-cols-1 lg:grid-cols-4 gap-6">
+          {/* Sidebar */}
+          <div className="lg:col-span-1 bg-slate-950/80 rounded-2xl border border-slate-800 p-3 shadow-xl h-fit space-y-1">
+            <div className="px-3 py-2 text-[10px] font-mono uppercase font-bold text-slate-400 tracking-wider">
+              Admin Modules
+            </div>
+            {navSections.map((s) => {
+              const Icon = s.icon;
+              return (
+                <button
+                  key={s.id}
+                  onClick={() => setSection(s.id)}
+                  className={`w-full text-left px-3 py-2 rounded-xl text-xs font-semibold transition flex items-center space-x-2.5 cursor-pointer ${
+                    section === s.id
+                      ? 'bg-blue-600 text-white shadow-md shadow-blue-600/30 font-bold'
+                      : 'text-slate-400 hover:text-white hover:bg-slate-900'
+                  }`}
+                >
+                  <Icon className="w-4 h-4 shrink-0 text-sky-400" />
+                  <span className="truncate">{s.label}</span>
+                </button>
+              );
+            })}
+          </div>
+
+          {/* Main Content Area */}
+          <div className="lg:col-span-3 space-y-6">
+            {/* Section 0: Unified Currency & Network Hub */}
+            {section === 0 && (
+              <UnifiedCurrencyHub token={token} onRefreshData={onRefreshData} />
+            )}
+
+            {/* Section 1: Overview & Stats */}
+            {section === 1 && (
+              <div className="space-y-6">
+                <div className="grid grid-cols-2 sm:grid-cols-4 gap-3.5">
+                  <div className="bg-slate-950 p-4 rounded-2xl border border-slate-800">
+                    <span className="text-xs text-slate-400">Total Users</span>
+                    <p className="text-2xl font-black font-mono text-white mt-1">{stats?.totalUsers || 0}</p>
+                  </div>
+                  <div className="bg-slate-950 p-4 rounded-2xl border border-slate-800">
+                    <span className="text-xs text-slate-400">Total Transactions</span>
+                    <p className="text-2xl font-black font-mono text-white mt-1">{stats?.totalTransactions || 0}</p>
+                  </div>
+                  <div className="bg-slate-950 p-4 rounded-2xl border border-slate-800">
+                    <span className="text-xs text-amber-400">Pending Review</span>
+                    <p className="text-2xl font-black font-mono text-amber-400 mt-1">{stats?.pendingCount || 0}</p>
+                  </div>
+                  <div className="bg-slate-950 p-4 rounded-2xl border border-slate-800">
+                    <span className="text-xs text-emerald-400">Completed Orders</span>
+                    <p className="text-2xl font-black font-mono text-emerald-400 mt-1">{stats?.completedCount || 0}</p>
+                  </div>
+                </div>
+
+                <div className="grid grid-cols-1 sm:grid-cols-3 gap-3.5">
+                  <div className="bg-slate-950 p-4 rounded-2xl border border-slate-800">
+                    <span className="text-xs text-slate-400">Fiat Volume (BDT)</span>
+                    <p className="text-xl font-bold font-mono text-sky-400 mt-1">
+                      ৳{stats?.totalFiatVolumeBDT?.toLocaleString() || '0'}
+                    </p>
+                  </div>
+                  <div className="bg-slate-950 p-4 rounded-2xl border border-slate-800">
+                    <span className="text-xs text-slate-400">Crypto Volume (USDT)</span>
+                    <p className="text-xl font-bold font-mono text-emerald-400 mt-1">
+                      ${stats?.totalCryptoVolumeUSDT?.toLocaleString() || '0'}
+                    </p>
+                  </div>
+                  <div className="bg-slate-950 p-4 rounded-2xl border border-slate-800">
+                    <span className="text-xs text-slate-400">Fees Collected</span>
+                    <p className="text-xl font-bold font-mono text-amber-400 mt-1">
+                      ${stats?.totalFeesCollected?.toFixed(2) || '0.00'}
+                    </p>
+                  </div>
+                </div>
+
+                {/* Quick Actions / Pending Orders Preview */}
+                <div className="bg-slate-950/80 rounded-2xl border border-slate-800 p-5">
+                  <h3 className="font-bold text-white font-mono text-sm mb-3 flex items-center justify-between">
+                    <span>PENDING VERIFICATION QUEUE</span>
+                    <span className="text-xs text-amber-400 font-sans">{stats?.pendingCount || 0} Orders awaiting approval</span>
+                  </h3>
+
+                  <div className="space-y-2">
+                    {transactions
+                      .filter((t) => t.status === 'pending')
+                      .slice(0, 5)
+                      .map((t) => (
+                        <div
+                          key={t.id}
+                          className="bg-slate-900 p-3.5 rounded-xl border border-slate-800 flex flex-col sm:flex-row justify-between items-start sm:items-center gap-3 text-xs"
+                        >
+                          <div>
+                            <div className="flex items-center space-x-2">
+                              <span className="font-bold text-sky-400 font-mono">{t.orderId}</span>
+                              <span className="text-[10px] bg-blue-500/20 text-blue-300 px-1.5 py-0.5 rounded uppercase font-bold">
+                                {t.type}
+                              </span>
+                              <span className="text-slate-400 font-mono">{t.fromAmount} {t.fromCurrency} → {t.toAmount} {t.toCurrency}</span>
+                            </div>
+                            <p className="text-[11px] text-slate-500 mt-1">
+                              User: {t.userEmail} • Ref: {t.userTxidReference || 'None'}
+                            </p>
+                          </div>
+                          <div className="flex items-center space-x-2 shrink-0">
+                            <button
+                              onClick={() => {
+                                setSelectedTxn(t);
+                                setApproveModalOpen(true);
+                              }}
+                              className="bg-emerald-600 hover:bg-emerald-500 text-white font-bold px-3 py-1.5 rounded-lg text-xs transition cursor-pointer"
+                            >
+                              Approve
+                            </button>
+                            <button
+                              onClick={() => {
+                                setSelectedTxn(t);
+                                setRejectModalOpen(true);
+                              }}
+                              className="bg-rose-600/30 hover:bg-rose-600 text-rose-300 hover:text-white border border-rose-500/40 px-3 py-1.5 rounded-lg text-xs transition cursor-pointer"
+                            >
+                              Reject
+                            </button>
+                          </div>
+                        </div>
+                      ))}
+                    {transactions.filter((t) => t.status === 'pending').length === 0 && (
+                      <p className="text-xs text-slate-500 text-center py-6">All transactions verified! Zero pending orders.</p>
+                    )}
+                  </div>
+                </div>
+              </div>
+            )}
+
+            {/* Section 2: User Management */}
+            {section === 2 && (
+              <div className="bg-slate-950/80 rounded-2xl border border-slate-800 p-5 shadow-xl">
+                <div className="flex justify-between items-center mb-4">
+                  <h3 className="font-bold text-white font-mono text-sm sm:text-base">REGISTERED USERS ({usersList.length})</h3>
+                </div>
+                <div className="overflow-x-auto">
+                  <table className="w-full text-left text-xs">
+                    <thead className="bg-slate-900/40 text-slate-400 uppercase font-mono border-b border-slate-800">
+                      <tr>
+                        <th className="py-2.5 px-3">User</th>
+                        <th className="py-2.5 px-3">Role</th>
+                        <th className="py-2.5 px-3">Status</th>
+                        <th className="py-2.5 px-3">Verified</th>
+                        <th className="py-2.5 px-3">Joined Date</th>
+                      </tr>
+                    </thead>
+                    <tbody className="divide-y divide-slate-850 font-mono">
+                      {usersList.map((u) => (
+                        <tr key={u.id} className="hover:bg-slate-900/40">
+                          <td className="py-3 px-3">
+                            <div className="font-bold text-white font-sans">{u.name || 'Unnamed'}</div>
+                            <div className="text-[11px] text-slate-400">{u.email}</div>
+                          </td>
+                          <td className="py-3 px-3">
+                            <span className="text-[10px] bg-slate-800 px-2 py-0.5 rounded text-sky-300 uppercase">
+                              {u.role}
+                            </span>
+                          </td>
+                          <td className="py-3 px-3">
+                            <span className={`text-[10px] px-2 py-0.5 rounded-full uppercase ${
+                              u.status === 'active' ? 'bg-emerald-500/20 text-emerald-400' : 'bg-rose-500/20 text-rose-400'
+                            }`}>
+                              {u.status}
+                            </span>
+                          </td>
+                          <td className="py-3 px-3 text-slate-300">
+                            {u.isVerified ? 'Yes' : 'No'}
+                          </td>
+                          <td className="py-3 px-3 text-slate-500 text-[11px]">
+                            {new Date(u.createdAt).toLocaleDateString()}
+                          </td>
+                        </tr>
+                      ))}
+                    </tbody>
+                  </table>
+                </div>
+              </div>
+            )}
+
+            {/* Section 3: Fiat Currency Management (WITH VALUE CHANGE) */}
+            {section === 3 && (
+              <div className="bg-slate-950/80 rounded-2xl border border-slate-800 p-5 shadow-xl space-y-4">
+                <div className="flex flex-col sm:flex-row justify-between items-start sm:items-center gap-3">
+                  <div>
+                    <h3 className="font-bold text-white font-mono text-sm sm:text-base flex items-center space-x-2">
+                      <DollarSign className="w-4 h-4 text-emerald-400" />
+                      <span>FIAT CURRENCY MANAGEMENT & VALUE CONTROLS</span>
+                    </h3>
+                    <p className="text-xs text-slate-400">
+                      Change buy/sell exchange rates, reserve vaults, transaction limits, and fees dynamically.
+                    </p>
+                  </div>
+                  <button
+                    onClick={handleOpenAddFiat}
+                    className="bg-blue-600 hover:bg-blue-500 text-white font-bold px-3.5 py-2 rounded-xl text-xs transition flex items-center space-x-1.5 shadow-lg shadow-blue-600/20 cursor-pointer"
+                  >
+                    <Plus className="w-4 h-4" />
+                    <span>Add New Fiat</span>
+                  </button>
+                </div>
+
+                <div className="overflow-x-auto">
+                  <table className="w-full text-left text-xs font-mono">
+                    <thead className="bg-slate-900/40 text-slate-400 uppercase border-b border-slate-800">
+                      <tr>
+                        <th className="py-2.5 px-3">Currency</th>
+                        <th className="py-2.5 px-3">Buy Rate</th>
+                        <th className="py-2.5 px-3">Sell Rate</th>
+                        <th className="py-2.5 px-3">Reserve Vault</th>
+                        <th className="py-2.5 px-3">Min/Max Limits</th>
+                        <th className="py-2.5 px-3">Fee</th>
+                        <th className="py-2.5 px-3">Status</th>
+                        <th className="py-2.5 px-3 text-right">Actions</th>
+                      </tr>
+                    </thead>
+                    <tbody className="divide-y divide-slate-850">
+                      {fiats.map((f) => (
+                        <tr key={f.code} className="hover:bg-slate-900/40 transition">
+                          <td className="py-3 px-3 font-bold text-white">
+                            <span className="text-sky-300 mr-1.5">{f.symbol}</span>
+                            <span>{f.code}</span>
+                            <span className="text-slate-500 font-sans text-[11px] block">{f.name}</span>
+                          </td>
+                          <td className="py-3 px-3 text-emerald-400 font-bold text-sm">
+                            {parseFloat(f.buyRate).toFixed(2)}
+                          </td>
+                          <td className="py-3 px-3 text-sky-400 font-bold text-sm">
+                            {parseFloat(f.sellRate).toFixed(2)}
+                          </td>
+                          <td className="py-3 px-3 text-slate-200">
+                            {f.symbol} {parseFloat(f.reserveAmount).toLocaleString()}
+                          </td>
+                          <td className="py-3 px-3 text-slate-400">
+                            {f.minLimit} - {f.maxLimit}
+                          </td>
+                          <td className="py-3 px-3 text-slate-300">
+                            {f.symbol}{f.transactionFee}
+                          </td>
+                          <td className="py-3 px-3">
+                            <button
+                              onClick={() => handleToggleFiatStatus(f)}
+                              className={`text-[10px] px-2 py-0.5 rounded cursor-pointer font-bold ${
+                                f.isEnabled
+                                  ? 'bg-emerald-500/20 text-emerald-400 border border-emerald-500/30'
+                                  : 'bg-rose-500/20 text-rose-400 border border-rose-500/30'
+                              }`}
+                            >
+                              {f.isEnabled ? 'Enabled' : 'Disabled'}
+                            </button>
+                          </td>
+                          <td className="py-3 px-3 text-right">
+                            <button
+                              onClick={() => handleOpenEditFiat(f)}
+                              className="bg-blue-600/30 hover:bg-blue-600 text-blue-300 hover:text-white border border-blue-500/40 px-2.5 py-1 rounded text-xs transition cursor-pointer font-sans font-semibold flex items-center space-x-1 ml-auto"
+                            >
+                              <Edit className="w-3 h-3" />
+                              <span>Change Values</span>
+                            </button>
+                          </td>
+                        </tr>
+                      ))}
+                    </tbody>
+                  </table>
+                </div>
+              </div>
+            )}
+
+            {/* Section 4: Cryptocurrency Management (WITH VALUE CHANGE) */}
+            {section === 4 && (
+              <div className="bg-slate-950/80 rounded-2xl border border-slate-800 p-5 shadow-xl space-y-4">
+                <div className="flex flex-col sm:flex-row justify-between items-start sm:items-center gap-3">
+                  <div>
+                    <h3 className="font-bold text-white font-mono text-sm sm:text-base flex items-center space-x-2">
+                      <Coins className="w-4 h-4 text-sky-400" />
+                      <span>CRYPTOCURRENCY MANAGEMENT & PRICE CONTROLS</span>
+                    </h3>
+                    <p className="text-xs text-slate-400">
+                      Configure live buying and selling prices (USD), reserves, fees, deposit/withdrawal toggles.
+                    </p>
+                  </div>
+                  <button
+                    onClick={handleOpenAddCrypto}
+                    className="bg-blue-600 hover:bg-blue-500 text-white font-bold px-3.5 py-2 rounded-xl text-xs transition flex items-center space-x-1.5 shadow-lg shadow-blue-600/20 cursor-pointer"
+                  >
+                    <Plus className="w-4 h-4" />
+                    <span>Add New Coin</span>
+                  </button>
+                </div>
+
+                <div className="overflow-x-auto">
+                  <table className="w-full text-left text-xs font-mono">
+                    <thead className="bg-slate-900/40 text-slate-400 uppercase border-b border-slate-800">
+                      <tr>
+                        <th className="py-2.5 px-3">Asset</th>
+                        <th className="py-2.5 px-3">Buy Price ($)</th>
+                        <th className="py-2.5 px-3">Sell Price ($)</th>
+                        <th className="py-2.5 px-3">Fee %</th>
+                        <th className="py-2.5 px-3">Reserve Vault</th>
+                        <th className="py-2.5 px-3">Deposit/Withdraw</th>
+                        <th className="py-2.5 px-3">Status</th>
+                        <th className="py-2.5 px-3 text-right">Actions</th>
+                      </tr>
+                    </thead>
+                    <tbody className="divide-y divide-slate-850">
+                      {cryptos.map((c) => (
+                        <tr key={c.symbol} className="hover:bg-slate-900/40 transition">
+                          <td className="py-3 px-3 font-bold text-white">
+                            <span className="text-sky-400 mr-1.5">{c.symbol}</span>
+                            <span className="text-slate-400 font-sans text-[11px] block">{c.name}</span>
+                          </td>
+                          <td className="py-3 px-3 text-emerald-400 font-bold text-sm">
+                            ${parseFloat(c.buyPrice).toLocaleString(undefined, { minimumFractionDigits: 2 })}
+                          </td>
+                          <td className="py-3 px-3 text-sky-400 font-bold text-sm">
+                            ${parseFloat(c.sellPrice).toLocaleString(undefined, { minimumFractionDigits: 2 })}
+                          </td>
+                          <td className="py-3 px-3 text-slate-300">
+                            {c.feePercentage}%
+                          </td>
+                          <td className="py-3 px-3 text-slate-300">
+                            {parseFloat(c.reserveAmount).toLocaleString()} {c.symbol}
+                          </td>
+                          <td className="py-3 px-3 text-[11px]">
+                            <span className={c.depositEnabled ? 'text-emerald-400' : 'text-slate-600'}>Dep: {c.depositEnabled ? '✓' : '✗'}</span>
+                            <span className="mx-1">•</span>
+                            <span className={c.withdrawalEnabled ? 'text-emerald-400' : 'text-slate-600'}>Wdr: {c.withdrawalEnabled ? '✓' : '✗'}</span>
+                          </td>
+                          <td className="py-3 px-3">
+                            <button
+                              onClick={() => handleToggleCryptoStatus(c)}
+                              className={`text-[10px] px-2 py-0.5 rounded cursor-pointer font-bold ${
+                                c.isEnabled
+                                  ? 'bg-emerald-500/20 text-emerald-400 border border-emerald-500/30'
+                                  : 'bg-rose-500/20 text-rose-400 border border-rose-500/30'
+                              }`}
+                            >
+                              {c.isEnabled ? 'Active' : 'Disabled'}
+                            </button>
+                          </td>
+                          <td className="py-3 px-3 text-right">
+                            <button
+                              onClick={() => handleOpenEditCrypto(c)}
+                              className="bg-blue-600/30 hover:bg-blue-600 text-blue-300 hover:text-white border border-blue-500/40 px-2.5 py-1 rounded text-xs transition cursor-pointer font-sans font-semibold flex items-center space-x-1 ml-auto"
+                            >
+                              <Edit className="w-3 h-3" />
+                              <span>Change Values</span>
+                            </button>
+                          </td>
+                        </tr>
+                      ))}
+                    </tbody>
+                  </table>
+                </div>
+              </div>
+            )}
+
+            {/* Section 5: Blockchain Networks */}
+            {section === 5 && (
+              <div className="bg-slate-950/80 rounded-2xl border border-slate-800 p-5 shadow-xl space-y-4">
+                <div className="flex justify-between items-center">
+                  <h3 className="font-bold text-white font-mono text-sm sm:text-base">BLOCKCHAIN NETWORKS</h3>
+                </div>
+                <div className="space-y-3 font-mono text-xs">
+                  {networks.map((n) => (
+                    <div key={n.id} className="bg-slate-900 p-4 rounded-xl border border-slate-800 flex justify-between items-center">
+                      <div>
+                        <div className="flex items-center space-x-2">
+                          <span className="font-bold text-white text-sm">{n.displayName}</span>
+                          <span className="bg-slate-800 px-2 py-0.5 rounded text-sky-400 text-[10px]">{n.name}</span>
+                        </div>
+                        <p className="text-slate-400 text-xs mt-1 font-sans">
+                          Fee: ${n.networkFee} • Confirmations required: {n.confirmationCount}
+                        </p>
+                        {n.warningNote && (
+                          <p className="text-[11px] text-amber-300 mt-1 font-sans">{n.warningNote}</p>
+                        )}
+                      </div>
+                      <span className="text-xs bg-emerald-500/20 text-emerald-400 px-2.5 py-1 rounded-full font-bold">
+                        Active
+                      </span>
+                    </div>
+                  ))}
+                </div>
+              </div>
+            )}
+
+            {/* Section 6: Payment Methods */}
+            {section === 6 && (
+              <div className="bg-slate-950/80 rounded-2xl border border-slate-800 p-5 shadow-xl space-y-4">
+                <h3 className="font-bold text-white font-mono text-sm sm:text-base">PAYMENT METHODS CONFIGURATION</h3>
+                <div className="grid grid-cols-1 sm:grid-cols-2 gap-3.5 font-mono text-xs">
+                  {paymentMethods.map((p) => (
+                    <div key={p.id} className="bg-slate-900 p-4 rounded-xl border border-slate-800 space-y-2">
+                      <div className="flex justify-between items-center">
+                        <span className="font-bold text-sky-400 font-sans text-sm">{p.name}</span>
+                        <span className="text-[10px] bg-slate-800 px-1.5 py-0.5 rounded text-slate-300">{p.fiatCode}</span>
+                      </div>
+                      <p className="text-amber-300 text-xs font-bold break-all">{p.accountNumber}</p>
+                      <p className="text-slate-400 text-[11px] font-sans">{p.instructions}</p>
+                    </div>
+                  ))}
+                </div>
+              </div>
+            )}
+
+            {/* Sections 7 & 8: Send & Receive Orders */}
+            {(section === 7 || section === 8) && (
+              <div className="bg-slate-950/80 rounded-2xl border border-slate-800 p-5 shadow-xl space-y-4">
+                <h3 className="font-bold text-white font-mono text-sm sm:text-base">
+                  {section === 7 ? 'SEND ORDERS (Fiat → Crypto)' : 'RECEIVE ORDERS (Crypto → Fiat)'}
+                </h3>
+                <div className="space-y-3 font-mono text-xs">
+                  {transactions
+                    .filter((t) =>
+                      section === 7
+                        ? t.type === 'SEND' || t.type === 'BUY'
+                        : t.type === 'RECEIVE' || t.type === 'SELL'
+                    )
+                    .map((t) => (
+                      <div key={t.id} className="bg-slate-900 p-4 rounded-xl border border-slate-800 flex justify-between items-center">
+                        <div>
+                          <span className="font-bold text-sky-400">{t.orderId}</span>
+                          <p className="text-slate-300 mt-1">
+                            {t.fromAmount} {t.fromCurrency} → {t.toAmount} {t.toCurrency}
+                          </p>
+                          <p className="text-[11px] text-slate-500 font-sans">
+                            Method: {t.paymentMethodName} • User: {t.userEmail}
+                          </p>
+                        </div>
+                        <div className="text-right">
+                          <span className="font-bold text-amber-400 uppercase">{t.status}</span>
+                          <p className="text-[11px] text-slate-500">{new Date(t.createdAt).toLocaleDateString()}</p>
+                        </div>
+                      </div>
+                    ))}
+                </div>
+              </div>
+            )}
+
+            {/* Sections 9 & 10: Deposit & Withdrawal Management */}
+            {(section === 9 || section === 10) && (
+              <div className="bg-slate-950/80 rounded-2xl border border-slate-800 p-5 shadow-xl space-y-4">
+                <h3 className="font-bold text-white font-mono text-sm sm:text-base">
+                  {section === 9 ? 'DEPOSIT QUEUE (RECEIVE)' : 'WITHDRAWAL QUEUE (SEND)'}
+                </h3>
+                <div className="space-y-3 font-mono text-xs">
+                  {transactions
+                    .filter((t) => t.type === (section === 9 ? 'RECEIVE' : 'SEND'))
+                    .map((t) => (
+                      <div key={t.id} className="bg-slate-900 p-4 rounded-xl border border-slate-800 flex justify-between items-center">
+                        <div>
+                          <span className="font-bold text-purple-400">{t.orderId}</span>
+                          <p className="text-slate-300 mt-1">
+                            Amount: {t.toAmount} {t.toCurrency}
+                          </p>
+                          <p className="text-[11px] text-slate-500 font-sans">
+                            Dest: {t.userReceiveAccount} • Network: {t.networkName}
+                          </p>
+                        </div>
+                        <div className="text-right">
+                          <span className="font-bold text-emerald-400 uppercase">{t.status}</span>
+                          <p className="text-[11px] text-slate-500">{new Date(t.createdAt).toLocaleDateString()}</p>
+                        </div>
+                      </div>
+                    ))}
+                </div>
+              </div>
+            )}
+
+            {/* Section 11: Exchange Rate Controls & Quick Calibration Matrix */}
+            {section === 11 && (
+              <div className="bg-slate-950/80 rounded-2xl border border-slate-800 p-5 shadow-xl space-y-6">
+                <div>
+                  <h3 className="font-bold text-white font-mono text-sm sm:text-base flex items-center space-x-2">
+                    <Sliders className="w-4 h-4 text-sky-400" />
+                    <span>EXCHANGE RATE & VALUE CALIBRATION BOARD</span>
+                  </h3>
+                  <p className="text-xs text-slate-400 mt-0.5">
+                    Instantly adjust buy rates, sell rates, crypto prices, and vault reserves with 1-click database updates.
+                  </p>
+                </div>
+
+                {rateUpdatedSuccess && (
+                  <div className="bg-emerald-500/10 border border-emerald-500/40 p-3 rounded-xl flex items-center space-x-2 text-xs text-emerald-300 font-mono">
+                    <CheckCircle2 className="w-4 h-4 text-emerald-400 shrink-0" />
+                    <span>{rateUpdatedSuccess}</span>
+                  </div>
+                )}
+
+                {/* Quick Fiat Rates Section */}
+                <div className="space-y-3">
+                  <h4 className="text-xs font-mono font-bold text-emerald-400 uppercase tracking-wider flex items-center space-x-1.5">
+                    <DollarSign className="w-3.5 h-3.5" />
+                    <span>Fiat Currency Rates (Per 1 USD Equivalent)</span>
+                  </h4>
+
+                  <div className="space-y-2.5">
+                    {fiats.map((f) => {
+                      const current = quickRatesFiat[f.id] || { buyRate: f.buyRate, sellRate: f.sellRate, reserveAmount: f.reserveAmount };
+                      return (
+                        <div
+                          key={f.id}
+                          className="bg-slate-900 p-3.5 rounded-xl border border-slate-800 flex flex-col md:flex-row items-start md:items-center justify-between gap-3 text-xs font-mono"
+                        >
+                          <div className="w-44 shrink-0">
+                            <span className="font-bold text-white text-sm">{f.code}</span>
+                            <span className="text-slate-400 font-sans ml-1 text-xs">({f.name})</span>
+                            <span className="block text-[11px] text-slate-500 font-sans mt-0.5">Symbol: {f.symbol}</span>
+                          </div>
+
+                          <div className="grid grid-cols-1 sm:grid-cols-3 gap-2 w-full max-w-lg">
+                            <div>
+                              <label className="block text-[10px] text-slate-400 mb-0.5 font-sans">Buy Rate ({f.symbol})</label>
+                              <input
+                                type="number"
+                                step="any"
+                                value={current.buyRate}
+                                onChange={(e) => {
+                                  setQuickRatesFiat({
+                                    ...quickRatesFiat,
+                                    [f.id]: { ...current, buyRate: e.target.value },
+                                  });
+                                }}
+                                className="w-full bg-slate-950 border border-slate-700 rounded-lg px-2.5 py-1.5 text-emerald-400 font-bold focus:outline-none focus:border-blue-500"
+                              />
+                            </div>
+                            <div>
+                              <label className="block text-[10px] text-slate-400 mb-0.5 font-sans">Sell Rate ({f.symbol})</label>
+                              <input
+                                type="number"
+                                step="any"
+                                value={current.sellRate}
+                                onChange={(e) => {
+                                  setQuickRatesFiat({
+                                    ...quickRatesFiat,
+                                    [f.id]: { ...current, sellRate: e.target.value },
+                                  });
+                                }}
+                                className="w-full bg-slate-950 border border-slate-700 rounded-lg px-2.5 py-1.5 text-sky-400 font-bold focus:outline-none focus:border-blue-500"
+                              />
+                            </div>
+                            <div>
+                              <label className="block text-[10px] text-slate-400 mb-0.5 font-sans">Reserve Amount</label>
+                              <input
+                                type="number"
+                                step="any"
+                                value={current.reserveAmount}
+                                onChange={(e) => {
+                                  setQuickRatesFiat({
+                                    ...quickRatesFiat,
+                                    [f.id]: { ...current, reserveAmount: e.target.value },
+                                  });
+                                }}
+                                className="w-full bg-slate-950 border border-slate-700 rounded-lg px-2.5 py-1.5 text-slate-200 focus:outline-none focus:border-blue-500"
+                              />
+                            </div>
+                          </div>
+
+                          <button
+                            onClick={() => handleQuickSaveFiatRate(f.id, f.code)}
+                            className="bg-emerald-600 hover:bg-emerald-500 text-white font-bold py-1.5 px-3.5 rounded-lg text-xs transition cursor-pointer flex items-center space-x-1 shrink-0 font-sans shadow-md"
+                          >
+                            <Save className="w-3.5 h-3.5" />
+                            <span>Save Rate</span>
+                          </button>
+                        </div>
+                      );
+                    })}
+                  </div>
+                </div>
+
+                {/* Quick Crypto Prices Section */}
+                <div className="space-y-3 pt-4 border-t border-slate-800">
+                  <h4 className="text-xs font-mono font-bold text-sky-400 uppercase tracking-wider flex items-center space-x-1.5">
+                    <Coins className="w-3.5 h-3.5" />
+                    <span>Cryptocurrency Prices & Reserves (USD Base)</span>
+                  </h4>
+
+                  <div className="space-y-2.5">
+                    {cryptos.map((c) => {
+                      const current = quickRatesCrypto[c.id] || { buyPrice: c.buyPrice, sellPrice: c.sellPrice, feePercentage: c.feePercentage, reserveAmount: c.reserveAmount };
+                      return (
+                        <div
+                          key={c.id}
+                          className="bg-slate-900 p-3.5 rounded-xl border border-slate-800 flex flex-col md:flex-row items-start md:items-center justify-between gap-3 text-xs font-mono"
+                        >
+                          <div className="w-44 shrink-0">
+                            <span className="font-bold text-sky-400 text-sm">{c.symbol}</span>
+                            <span className="text-slate-400 font-sans ml-1 text-xs">({c.name})</span>
+                            <span className="block text-[11px] text-slate-500 font-sans mt-0.5">Platform Fee: {c.feePercentage}%</span>
+                          </div>
+
+                          <div className="grid grid-cols-1 sm:grid-cols-3 gap-2 w-full max-w-lg">
+                            <div>
+                              <label className="block text-[10px] text-slate-400 mb-0.5 font-sans">Buy Price ($ USD)</label>
+                              <input
+                                type="number"
+                                step="any"
+                                value={current.buyPrice}
+                                onChange={(e) => {
+                                  setQuickRatesCrypto({
+                                    ...quickRatesCrypto,
+                                    [c.id]: { ...current, buyPrice: e.target.value },
+                                  });
+                                }}
+                                className="w-full bg-slate-950 border border-slate-700 rounded-lg px-2.5 py-1.5 text-emerald-400 font-bold focus:outline-none focus:border-blue-500"
+                              />
+                            </div>
+                            <div>
+                              <label className="block text-[10px] text-slate-400 mb-0.5 font-sans">Sell Price ($ USD)</label>
+                              <input
+                                type="number"
+                                step="any"
+                                value={current.sellPrice}
+                                onChange={(e) => {
+                                  setQuickRatesCrypto({
+                                    ...quickRatesCrypto,
+                                    [c.id]: { ...current, sellPrice: e.target.value },
+                                  });
+                                }}
+                                className="w-full bg-slate-950 border border-slate-700 rounded-lg px-2.5 py-1.5 text-sky-400 font-bold focus:outline-none focus:border-blue-500"
+                              />
+                            </div>
+                            <div>
+                              <label className="block text-[10px] text-slate-400 mb-0.5 font-sans">Reserve Vault ({c.symbol})</label>
+                              <input
+                                type="number"
+                                step="any"
+                                value={current.reserveAmount}
+                                onChange={(e) => {
+                                  setQuickRatesCrypto({
+                                    ...quickRatesCrypto,
+                                    [c.id]: { ...current, reserveAmount: e.target.value },
+                                  });
+                                }}
+                                className="w-full bg-slate-950 border border-slate-700 rounded-lg px-2.5 py-1.5 text-slate-200 focus:outline-none focus:border-blue-500"
+                              />
+                            </div>
+                          </div>
+
+                          <button
+                            onClick={() => handleQuickSaveCryptoPrice(c.id, c.symbol)}
+                            className="bg-blue-600 hover:bg-blue-500 text-white font-bold py-1.5 px-3.5 rounded-lg text-xs transition cursor-pointer flex items-center space-x-1 shrink-0 font-sans shadow-md"
+                          >
+                            <Save className="w-3.5 h-3.5" />
+                            <span>Save Price</span>
+                          </button>
+                        </div>
+                      );
+                    })}
+                  </div>
+                </div>
+              </div>
+            )}
+
+            {/* Section 12: Full Transaction History with Filters */}
+            {section === 12 && (
+              <div className="bg-slate-950/80 rounded-2xl border border-slate-800 p-5 shadow-xl space-y-4">
+                <div className="flex flex-col sm:flex-row justify-between items-start sm:items-center gap-3">
+                  <h3 className="font-bold text-white font-mono text-sm sm:text-base">
+                    ALL TRANSACTIONS ({transactions.length})
+                  </h3>
+                  <div className="flex items-center space-x-2">
+                    <button
+                      onClick={handleExportCSV}
+                      className="bg-emerald-600 hover:bg-emerald-500 text-white font-bold px-3 py-1.5 rounded-lg text-xs transition cursor-pointer flex items-center space-x-1"
+                    >
+                      <Download className="w-3.5 h-3.5" />
+                      <span>Export CSV</span>
+                    </button>
+                  </div>
+                </div>
+
+                {/* Filter Controls */}
+                <div className="grid grid-cols-1 sm:grid-cols-4 gap-2.5 text-xs">
+                  <input
+                    type="text"
+                    value={searchQuery}
+                    onChange={(e) => setSearchQuery(e.target.value)}
+                    placeholder="Search by ID, email, txid..."
+                    className="bg-slate-900 border border-slate-700 rounded-lg px-3 py-2 text-white placeholder-slate-500 font-mono focus:outline-none"
+                  />
+                  <select
+                    value={filterType}
+                    onChange={(e) => setFilterType(e.target.value)}
+                    className="bg-slate-900 border border-slate-700 rounded-lg px-3 py-2 text-white font-semibold"
+                  >
+                    <option value="ALL">All Types</option>
+                    <option value="BUY">BUY</option>
+                    <option value="SELL">SELL</option>
+                    <option value="SEND">SEND</option>
+                    <option value="RECEIVE">RECEIVE</option>
+                  </select>
+                  <select
+                    value={filterStatus}
+                    onChange={(e) => setFilterStatus(e.target.value)}
+                    className="bg-slate-900 border border-slate-700 rounded-lg px-3 py-2 text-white font-semibold"
+                  >
+                    <option value="ALL">All Status</option>
+                    <option value="pending">Pending</option>
+                    <option value="processing">Processing</option>
+                    <option value="completed">Completed</option>
+                    <option value="rejected">Rejected</option>
+                  </select>
+                  <select
+                    value={filterArchived}
+                    onChange={(e) => setFilterArchived(e.target.value)}
+                    className="bg-slate-900 border border-slate-700 rounded-lg px-3 py-2 text-white font-semibold"
+                  >
+                    <option value="false">Active Only</option>
+                    <option value="true">Archived Only</option>
+                    <option value="ALL">All Records</option>
+                  </select>
+                </div>
+
+                {/* Transactions Table */}
+                <div className="overflow-x-auto">
+                  <table className="w-full text-left text-xs font-mono">
+                    <thead className="bg-slate-900/40 text-slate-400 uppercase border-b border-slate-800">
+                      <tr>
+                        <th className="py-2.5 px-3">Order ID</th>
+                        <th className="py-2.5 px-3">Customer</th>
+                        <th className="py-2.5 px-3">Operation</th>
+                        <th className="py-2.5 px-3">Amount</th>
+                        <th className="py-2.5 px-3">Status</th>
+                        <th className="py-2.5 px-3">Date</th>
+                        <th className="py-2.5 px-3 text-right">Actions</th>
+                      </tr>
+                    </thead>
+                    <tbody className="divide-y divide-slate-850">
+                      {transactions.map((t) => (
+                        <tr key={t.id} className="hover:bg-slate-900/40">
+                          <td className="py-3 px-3 font-bold text-sky-400">{t.orderId}</td>
+                          <td className="py-3 px-3 font-sans">
+                            <div className="text-white font-medium">{t.userName || t.userEmail?.split('@')[0]}</div>
+                            <div className="text-[10px] text-slate-500 font-mono">{t.userEmail}</div>
+                          </td>
+                          <td className="py-3 px-3">
+                            <span className="text-[10px] bg-slate-800 text-sky-300 px-1.5 py-0.5 rounded font-bold">
+                              {t.type}
+                            </span>
+                          </td>
+                          <td className="py-3 px-3 text-white font-bold">
+                            {t.fromAmount} {t.fromCurrency} → {t.toAmount} {t.toCurrency}
+                          </td>
+                          <td className="py-3 px-3">
+                            <span
+                              className={`text-[10px] font-bold px-2 py-0.5 rounded-full uppercase ${
+                                t.status === 'completed'
+                                  ? 'bg-emerald-500/20 text-emerald-400'
+                                  : t.status === 'rejected'
+                                  ? 'bg-rose-500/20 text-rose-400'
+                                  : 'bg-amber-500/20 text-amber-400'
+                              }`}
+                            >
+                              {t.status}
+                            </span>
+                          </td>
+                          <td className="py-3 px-3 text-slate-500 text-[11px]">
+                            {new Date(t.createdAt).toLocaleDateString()}
+                          </td>
+                          <td className="py-3 px-3 text-right">
+                            <div className="inline-flex space-x-1 font-sans">
+                              {t.status === 'pending' && (
+                                <>
+                                  <button
+                                    onClick={() => {
+                                      setSelectedTxn(t);
+                                      setApproveModalOpen(true);
+                                    }}
+                                    className="bg-emerald-600 hover:bg-emerald-500 text-white px-2 py-1 rounded text-[11px] font-bold cursor-pointer"
+                                  >
+                                    Approve
+                                  </button>
+                                  <button
+                                    onClick={() => {
+                                      setSelectedTxn(t);
+                                      setRejectModalOpen(true);
+                                    }}
+                                    className="bg-rose-600 hover:bg-rose-500 text-white px-2 py-1 rounded text-[11px] font-bold cursor-pointer"
+                                  >
+                                    Reject
+                                  </button>
+                                </>
+                              )}
+                              <button
+                                onClick={() => handleArchive(t.id, !t.isArchived)}
+                                title={t.isArchived ? 'Unarchive' : 'Archive'}
+                                className="bg-slate-800 hover:bg-slate-700 text-slate-300 p-1 rounded cursor-pointer"
+                              >
+                                <Archive className="w-3.5 h-3.5" />
+                              </button>
+                              <button
+                                onClick={() => handleSoftDelete(t.id)}
+                                title="Soft Delete"
+                                className="bg-slate-800 hover:bg-rose-900/40 text-rose-400 p-1 rounded cursor-pointer"
+                              >
+                                <Trash2 className="w-3.5 h-3.5" />
+                              </button>
+                            </div>
+                          </td>
+                        </tr>
+                      ))}
+                    </tbody>
+                  </table>
+                </div>
+              </div>
+            )}
+
+            {/* Section 13 & 14: Website & Telegram Support Settings */}
+            {(section === 13 || section === 14) && (
+              <div className="bg-slate-950/80 rounded-2xl border border-slate-800 p-6 shadow-xl">
+                <h3 className="font-bold text-white font-mono text-sm sm:text-base mb-4 flex items-center space-x-2">
+                  <Settings className="w-4 h-4 text-sky-400" />
+                  <span>
+                    {section === 13 ? 'WEBSITE SETTINGS & NOTICE BANNER' : 'TELEGRAM SUPPORT CONFIGURATION'}
+                  </span>
+                </h3>
+
+                {settingsSaved && (
+                  <div className="bg-emerald-500/10 border border-emerald-500/30 p-3 rounded-xl text-xs text-emerald-300 mb-4 flex items-center space-x-2">
+                    <Check className="w-4 h-4 text-emerald-400 shrink-0" />
+                    <span>Settings updated and synchronized in PostgreSQL database!</span>
+                  </div>
+                )}
+
+                <form onSubmit={handleSaveSettings} className="space-y-4 text-xs sm:text-sm">
+                  {section === 13 ? (
+                    <>
+                      <div>
+                        <label className="block text-slate-400 font-semibold mb-1">Platform Name</label>
+                        <input
+                          type="text"
+                          value={siteName}
+                          onChange={(e) => setSiteName(e.target.value)}
+                          className="w-full bg-slate-900 border border-slate-700 rounded-xl px-3.5 py-2.5 text-white focus:outline-none focus:border-blue-500"
+                        />
+                      </div>
+                      <div>
+                        <label className="block text-slate-400 font-semibold mb-1">Website Tagline</label>
+                        <input
+                          type="text"
+                          value={siteTagline}
+                          onChange={(e) => setSiteTagline(e.target.value)}
+                          className="w-full bg-slate-900 border border-slate-700 rounded-xl px-3.5 py-2.5 text-white focus:outline-none focus:border-blue-500"
+                        />
+                      </div>
+                      <div>
+                        <label className="block text-slate-400 font-semibold mb-1">Announcement Notice Banner</label>
+                        <textarea
+                          rows={3}
+                          value={siteNotice}
+                          onChange={(e) => setSiteNotice(e.target.value)}
+                          className="w-full bg-slate-900 border border-slate-700 rounded-xl px-3.5 py-2.5 text-white focus:outline-none focus:border-blue-500"
+                        />
+                      </div>
+                    </>
+                  ) : (
+                    <>
+                      <div>
+                        <label className="block text-slate-400 font-semibold mb-1">Telegram Support Username</label>
+                        <input
+                          type="text"
+                          value={telegramUsername}
+                          onChange={(e) => setTelegramUsername(e.target.value)}
+                          placeholder="@DollarExchangeBD_Support"
+                          className="w-full bg-slate-900 border border-slate-700 rounded-xl px-3.5 py-2.5 text-white font-mono focus:outline-none focus:border-blue-500"
+                        />
+                      </div>
+                      <div>
+                        <label className="block text-slate-400 font-semibold mb-1">Telegram Support Direct URL</label>
+                        <input
+                          type="url"
+                          value={telegramUrl}
+                          onChange={(e) => setTelegramUrl(e.target.value)}
+                          placeholder="https://t.me/DollarExchangeBD_Support"
+                          className="w-full bg-slate-900 border border-slate-700 rounded-xl px-3.5 py-2.5 text-white font-mono focus:outline-none focus:border-blue-500"
+                        />
+                      </div>
+                      <div>
+                        <label className="block text-slate-400 font-semibold mb-1">Support Availability Message</label>
+                        <input
+                          type="text"
+                          value={telegramAvailability}
+                          onChange={(e) => setTelegramAvailability(e.target.value)}
+                          placeholder="Online 24/7 (Instant Live Operator Response)"
+                          className="w-full bg-slate-900 border border-slate-700 rounded-xl px-3.5 py-2.5 text-white focus:outline-none focus:border-blue-500"
+                        />
+                      </div>
+                    </>
+                  )}
+
+                  <button
+                    type="submit"
+                    className="bg-blue-600 hover:bg-blue-500 text-white font-bold py-2.5 px-5 rounded-xl transition cursor-pointer shadow-lg shadow-blue-600/20"
+                  >
+                    Save Changes to Database
+                  </button>
+                </form>
+              </div>
+            )}
+
+            {/* Section 15: Security & Activity Audit */}
+            {section === 15 && (
+              <div className="bg-slate-950/80 rounded-2xl border border-slate-800 p-6 shadow-xl space-y-6">
+                <h3 className="font-bold text-white font-mono text-sm sm:text-base flex items-center space-x-2">
+                  <Shield className="w-4 h-4 text-emerald-400" />
+                  <span>IMMUTABLE AUDIT LOGS & SECURITY CONTROLS</span>
+                </h3>
+
+                <div className="bg-slate-900 p-4 rounded-xl border border-slate-800 flex justify-between items-center text-xs">
+                  <div>
+                    <span className="font-bold text-white">Two-Factor Authentication (2FA)</span>
+                    <p className="text-slate-400 mt-0.5">Admin elevated operations require 2FA authorization.</p>
+                  </div>
+                  <span className="bg-emerald-500/20 text-emerald-400 px-2.5 py-1 rounded-full font-bold">
+                    ENFORCED
+                  </span>
+                </div>
+
+                <div>
+                  <h4 className="text-xs font-mono font-bold text-slate-400 mb-2 uppercase">Recent Administrative Audit Logs</h4>
+                  <div className="space-y-2 font-mono text-xs max-h-80 overflow-y-auto">
+                    {activityLogs.map((log) => (
+                      <div key={log.id} className="bg-slate-900/60 p-3 rounded-lg border border-slate-800 flex justify-between items-center">
+                        <div>
+                          <span className="font-bold text-sky-400">{log.action}</span>
+                          <span className="text-slate-400 text-[11px] ml-2">by {log.adminEmail}</span>
+                          {log.details && <p className="text-slate-300 text-[11px] font-sans mt-0.5">{log.details}</p>}
+                        </div>
+                        <span className="text-slate-500 text-[10px] shrink-0">{new Date(log.createdAt).toLocaleTimeString()}</span>
+                      </div>
+                    ))}
+                  </div>
+                </div>
+              </div>
+            )}
+
+            {/* Section 16: Reports & CSV Analytics */}
+            {section === 16 && (
+              <div className="bg-slate-950/80 rounded-2xl border border-slate-800 p-6 shadow-xl space-y-4">
+                <h3 className="font-bold text-white font-mono text-sm sm:text-base flex items-center space-x-2">
+                  <Activity className="w-4 h-4 text-sky-400" />
+                  <span>REPORTS & ANALYTICS</span>
+                </h3>
+                <p className="text-xs text-slate-400">
+                  Generate compliance and accounting reports. All data is fetched directly from relational PostgreSQL tables.
+                </p>
+
+                <div className="bg-slate-900 p-5 rounded-2xl border border-slate-800 space-y-4 text-xs">
+                  <div className="flex justify-between items-center pb-3 border-b border-slate-800">
+                    <div>
+                      <span className="font-bold text-white text-sm">Full Transaction Ledger CSV</span>
+                      <p className="text-slate-400 text-[11px]">Includes Order IDs, TXIDs, customer emails, rates, and timestamps</p>
+                    </div>
+                    <button
+                      onClick={handleExportCSV}
+                      className="bg-emerald-600 hover:bg-emerald-500 text-white font-bold py-2 px-4 rounded-xl transition cursor-pointer flex items-center space-x-1.5"
+                    >
+                      <Download className="w-4 h-4" />
+                      <span>Download CSV</span>
+                    </button>
+                  </div>
+
+                  <div className="grid grid-cols-2 sm:grid-cols-3 gap-3 pt-2 font-mono">
+                    <div className="bg-slate-950 p-3 rounded-xl border border-slate-800">
+                      <span className="text-slate-400 text-[11px]">Completed Trades:</span>
+                      <p className="text-lg font-bold text-emerald-400 mt-1">{stats?.completedCount || 0}</p>
+                    </div>
+                    <div className="bg-slate-950 p-3 rounded-xl border border-slate-800">
+                      <span className="text-slate-400 text-[11px]">Rejected Trades:</span>
+                      <p className="text-lg font-bold text-rose-400 mt-1">{stats?.rejectedCount || 0}</p>
+                    </div>
+                    <div className="bg-slate-950 p-3 rounded-xl border border-slate-800">
+                      <span className="text-slate-400 text-[11px]">Platform Revenue:</span>
+                      <p className="text-lg font-bold text-amber-400 mt-1">${stats?.totalFeesCollected?.toFixed(2) || '0.00'}</p>
+                    </div>
+                  </div>
+                </div>
+              </div>
+            )}
+          </div>
+        </div>
+      </div>
+
+      {/* ============================================================ */}
+      {/* MODAL 1: FIAT CURRENCY VALUE CHANGE & CREATION */}
+      {/* ============================================================ */}
+      {fiatModalOpen && (
+        <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-black/80 backdrop-blur-sm animate-fade-in text-white">
+          <div className="bg-slate-900 border border-slate-700 max-w-xl w-full rounded-2xl p-6 shadow-2xl space-y-4 max-h-[90vh] overflow-y-auto">
+            <div className="flex justify-between items-center pb-2 border-b border-slate-800">
+              <h3 className="font-bold text-white font-mono text-base flex items-center space-x-2">
+                <DollarSign className="w-5 h-5 text-emerald-400" />
+                <span>
+                  {fiatModalMode === 'add' ? 'ADD NEW FIAT CURRENCY' : `EDIT ${fiatFormData.code} VALUES & RATES`}
+                </span>
+              </h3>
+              <button
+                onClick={() => setFiatModalOpen(false)}
+                className="w-7 h-7 rounded-full bg-slate-800 hover:bg-slate-700 flex items-center justify-center text-slate-400 hover:text-white"
+              >
+                <X className="w-4 h-4" />
+              </button>
+            </div>
+
+            <form onSubmit={handleSaveFiatForm} className="space-y-4 text-xs sm:text-sm">
+              <div className="grid grid-cols-1 sm:grid-cols-3 gap-3">
+                <div>
+                  <label className="block text-slate-400 font-semibold mb-1">Code (e.g. BDT, USD)</label>
+                  <input
+                    type="text"
+                    required
+                    disabled={fiatModalMode === 'edit'}
+                    value={fiatFormData.code}
+                    onChange={(e) => setFiatFormData({ ...fiatFormData, code: e.target.value.toUpperCase() })}
+                    placeholder="BDT"
+                    className="w-full bg-slate-950 border border-slate-700 rounded-xl px-3 py-2 text-white font-mono focus:outline-none focus:border-blue-500 uppercase disabled:opacity-60"
+                  />
+                </div>
+                <div>
+                  <label className="block text-slate-400 font-semibold mb-1">Name</label>
+                  <input
+                    type="text"
+                    required
+                    value={fiatFormData.name}
+                    onChange={(e) => setFiatFormData({ ...fiatFormData, name: e.target.value })}
+                    placeholder="Bangladeshi Taka"
+                    className="w-full bg-slate-950 border border-slate-700 rounded-xl px-3 py-2 text-white focus:outline-none focus:border-blue-500"
+                  />
+                </div>
+                <div>
+                  <label className="block text-slate-400 font-semibold mb-1">Symbol</label>
+                  <input
+                    type="text"
+                    required
+                    value={fiatFormData.symbol}
+                    onChange={(e) => setFiatFormData({ ...fiatFormData, symbol: e.target.value })}
+                    placeholder="৳ or $"
+                    className="w-full bg-slate-950 border border-slate-700 rounded-xl px-3 py-2 text-white font-bold focus:outline-none focus:border-blue-500"
+                  />
+                </div>
+              </div>
+
+              <div className="grid grid-cols-1 sm:grid-cols-2 gap-3 bg-slate-950 p-4 rounded-xl border border-slate-800">
+                <div>
+                  <label className="block text-emerald-400 font-bold mb-1">
+                    Platform Buy Rate (Per USD)
+                  </label>
+                  <input
+                    type="number"
+                    step="any"
+                    required
+                    value={fiatFormData.buyRate}
+                    onChange={(e) => setFiatFormData({ ...fiatFormData, buyRate: e.target.value })}
+                    placeholder="123.50"
+                    className="w-full bg-slate-900 border border-slate-700 rounded-xl px-3 py-2 text-white font-mono font-bold text-base focus:outline-none focus:border-emerald-500"
+                  />
+                  <span className="text-[10px] text-slate-400 mt-0.5 block">Rate when platform sells crypto to customer</span>
+                </div>
+                <div>
+                  <label className="block text-sky-400 font-bold mb-1">
+                    Platform Sell Rate (Per USD)
+                  </label>
+                  <input
+                    type="number"
+                    step="any"
+                    required
+                    value={fiatFormData.sellRate}
+                    onChange={(e) => setFiatFormData({ ...fiatFormData, sellRate: e.target.value })}
+                    placeholder="120.00"
+                    className="w-full bg-slate-900 border border-slate-700 rounded-xl px-3 py-2 text-white font-mono font-bold text-base focus:outline-none focus:border-sky-500"
+                  />
+                  <span className="text-[10px] text-slate-400 mt-0.5 block">Rate customer receives when selling crypto</span>
+                </div>
+              </div>
+
+              <div className="grid grid-cols-1 sm:grid-cols-3 gap-3">
+                <div>
+                  <label className="block text-slate-400 font-semibold mb-1">Reserve Vault Balance</label>
+                  <input
+                    type="number"
+                    step="any"
+                    required
+                    value={fiatFormData.reserveAmount}
+                    onChange={(e) => setFiatFormData({ ...fiatFormData, reserveAmount: e.target.value })}
+                    placeholder="2500000"
+                    className="w-full bg-slate-950 border border-slate-700 rounded-xl px-3 py-2 text-white font-mono focus:outline-none focus:border-blue-500"
+                  />
+                </div>
+                <div>
+                  <label className="block text-slate-400 font-semibold mb-1">Minimum Limit ({fiatFormData.code})</label>
+                  <input
+                    type="number"
+                    step="any"
+                    required
+                    value={fiatFormData.minLimit}
+                    onChange={(e) => setFiatFormData({ ...fiatFormData, minLimit: e.target.value })}
+                    placeholder="500"
+                    className="w-full bg-slate-950 border border-slate-700 rounded-xl px-3 py-2 text-white font-mono focus:outline-none focus:border-blue-500"
+                  />
+                </div>
+                <div>
+                  <label className="block text-slate-400 font-semibold mb-1">Maximum Limit ({fiatFormData.code})</label>
+                  <input
+                    type="number"
+                    step="any"
+                    required
+                    value={fiatFormData.maxLimit}
+                    onChange={(e) => setFiatFormData({ ...fiatFormData, maxLimit: e.target.value })}
+                    placeholder="500000"
+                    className="w-full bg-slate-950 border border-slate-700 rounded-xl px-3 py-2 text-white font-mono focus:outline-none focus:border-blue-500"
+                  />
+                </div>
+              </div>
+
+              <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
+                <div>
+                  <label className="block text-slate-400 font-semibold mb-1">Fixed Transaction Fee</label>
+                  <input
+                    type="number"
+                    step="any"
+                    value={fiatFormData.transactionFee}
+                    onChange={(e) => setFiatFormData({ ...fiatFormData, transactionFee: e.target.value })}
+                    placeholder="0"
+                    className="w-full bg-slate-950 border border-slate-700 rounded-xl px-3 py-2 text-white font-mono focus:outline-none focus:border-blue-500"
+                  />
+                </div>
+                <div className="flex items-center pt-5">
+                  <label className="flex items-center space-x-2 cursor-pointer">
+                    <input
+                      type="checkbox"
+                      checked={fiatFormData.isEnabled}
+                      onChange={(e) => setFiatFormData({ ...fiatFormData, isEnabled: e.target.checked })}
+                      className="w-4 h-4 rounded text-blue-600 focus:ring-0 cursor-pointer"
+                    />
+                    <span className="font-semibold text-white">Enable Fiat Currency</span>
+                  </label>
+                </div>
+              </div>
+
+              <div className="flex gap-2 pt-3 border-t border-slate-800">
+                <button
+                  type="submit"
+                  className="flex-1 bg-gradient-to-r from-blue-600 to-sky-600 hover:from-blue-500 hover:to-sky-500 text-white font-bold py-2.5 rounded-xl transition cursor-pointer shadow-lg shadow-blue-600/25"
+                >
+                  Save Fiat Currency Values
+                </button>
+                <button
+                  type="button"
+                  onClick={() => setFiatModalOpen(false)}
+                  className="flex-1 bg-slate-800 hover:bg-slate-700 text-slate-300 font-medium py-2.5 rounded-xl transition cursor-pointer"
+                >
+                  Cancel
+                </button>
+              </div>
+            </form>
+          </div>
+        </div>
+      )}
+
+      {/* ============================================================ */}
+      {/* MODAL 2: CRYPTOCURRENCY VALUE CHANGE & CREATION */}
+      {/* ============================================================ */}
+      {cryptoModalOpen && (
+        <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-black/80 backdrop-blur-sm animate-fade-in text-white">
+          <div className="bg-slate-900 border border-slate-700 max-w-xl w-full rounded-2xl p-6 shadow-2xl space-y-4 max-h-[90vh] overflow-y-auto">
+            <div className="flex justify-between items-center pb-2 border-b border-slate-800">
+              <h3 className="font-bold text-white font-mono text-base flex items-center space-x-2">
+                <Coins className="w-5 h-5 text-sky-400" />
+                <span>
+                  {cryptoModalMode === 'add' ? 'ADD NEW CRYPTOCURRENCY' : `EDIT ${cryptoFormData.symbol} VALUES & PRICING`}
+                </span>
+              </h3>
+              <button
+                onClick={() => setCryptoModalOpen(false)}
+                className="w-7 h-7 rounded-full bg-slate-800 hover:bg-slate-700 flex items-center justify-center text-slate-400 hover:text-white"
+              >
+                <X className="w-4 h-4" />
+              </button>
+            </div>
+
+            <form onSubmit={handleSaveCryptoForm} className="space-y-4 text-xs sm:text-sm">
+              <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
+                <div>
+                  <label className="block text-slate-400 font-semibold mb-1">Coin Symbol (e.g. USDT, BTC)</label>
+                  <input
+                    type="text"
+                    required
+                    disabled={cryptoModalMode === 'edit'}
+                    value={cryptoFormData.symbol}
+                    onChange={(e) => setCryptoFormData({ ...cryptoFormData, symbol: e.target.value.toUpperCase() })}
+                    placeholder="USDT"
+                    className="w-full bg-slate-950 border border-slate-700 rounded-xl px-3 py-2 text-white font-mono focus:outline-none focus:border-blue-500 uppercase disabled:opacity-60"
+                  />
+                </div>
+                <div>
+                  <label className="block text-slate-400 font-semibold mb-1">Coin Name</label>
+                  <input
+                    type="text"
+                    required
+                    value={cryptoFormData.name}
+                    onChange={(e) => setCryptoFormData({ ...cryptoFormData, name: e.target.value })}
+                    placeholder="Tether USD"
+                    className="w-full bg-slate-950 border border-slate-700 rounded-xl px-3 py-2 text-white focus:outline-none focus:border-blue-500"
+                  />
+                </div>
+              </div>
+
+              {/* Price changing row */}
+              <div className="grid grid-cols-1 sm:grid-cols-2 gap-3 bg-slate-950 p-4 rounded-xl border border-slate-800">
+                <div>
+                  <label className="block text-emerald-400 font-bold mb-1">
+                    Buy Price ($ USD Base)
+                  </label>
+                  <input
+                    type="number"
+                    step="any"
+                    required
+                    value={cryptoFormData.buyPrice}
+                    onChange={(e) => setCryptoFormData({ ...cryptoFormData, buyPrice: e.target.value })}
+                    placeholder="1.01"
+                    className="w-full bg-slate-900 border border-slate-700 rounded-xl px-3 py-2 text-white font-mono font-bold text-base focus:outline-none focus:border-emerald-500"
+                  />
+                  <span className="text-[10px] text-slate-400 mt-0.5 block">Unit price when customer purchases coin</span>
+                </div>
+                <div>
+                  <label className="block text-sky-400 font-bold mb-1">
+                    Sell Price ($ USD Base)
+                  </label>
+                  <input
+                    type="number"
+                    step="any"
+                    required
+                    value={cryptoFormData.sellPrice}
+                    onChange={(e) => setCryptoFormData({ ...cryptoFormData, sellPrice: e.target.value })}
+                    placeholder="0.99"
+                    className="w-full bg-slate-900 border border-slate-700 rounded-xl px-3 py-2 text-white font-mono font-bold text-base focus:outline-none focus:border-sky-500"
+                  />
+                  <span className="text-[10px] text-slate-400 mt-0.5 block">Unit payout rate when customer sells coin</span>
+                </div>
+              </div>
+
+              <div className="grid grid-cols-1 sm:grid-cols-3 gap-3">
+                <div>
+                  <label className="block text-slate-400 font-semibold mb-1">Fee Percentage (%)</label>
+                  <input
+                    type="number"
+                    step="any"
+                    required
+                    value={cryptoFormData.feePercentage}
+                    onChange={(e) => setCryptoFormData({ ...cryptoFormData, feePercentage: e.target.value })}
+                    placeholder="0.5"
+                    className="w-full bg-slate-950 border border-slate-700 rounded-xl px-3 py-2 text-white font-mono focus:outline-none focus:border-blue-500"
+                  />
+                </div>
+                <div>
+                  <label className="block text-slate-400 font-semibold mb-1">Min Order Limit</label>
+                  <input
+                    type="number"
+                    step="any"
+                    required
+                    value={cryptoFormData.minLimit}
+                    onChange={(e) => setCryptoFormData({ ...cryptoFormData, minLimit: e.target.value })}
+                    placeholder="10"
+                    className="w-full bg-slate-950 border border-slate-700 rounded-xl px-3 py-2 text-white font-mono focus:outline-none focus:border-blue-500"
+                  />
+                </div>
+                <div>
+                  <label className="block text-slate-400 font-semibold mb-1">Max Order Limit</label>
+                  <input
+                    type="number"
+                    step="any"
+                    required
+                    value={cryptoFormData.maxLimit}
+                    onChange={(e) => setCryptoFormData({ ...cryptoFormData, maxLimit: e.target.value })}
+                    placeholder="20000"
+                    className="w-full bg-slate-950 border border-slate-700 rounded-xl px-3 py-2 text-white font-mono focus:outline-none focus:border-blue-500"
+                  />
+                </div>
+              </div>
+
+              <div>
+                <label className="block text-slate-400 font-semibold mb-1">Vault Reserve Amount ({cryptoFormData.symbol})</label>
+                <input
+                  type="number"
+                  step="any"
+                  required
+                  value={cryptoFormData.reserveAmount}
+                  onChange={(e) => setCryptoFormData({ ...cryptoFormData, reserveAmount: e.target.value })}
+                  placeholder="150000"
+                  className="w-full bg-slate-950 border border-slate-700 rounded-xl px-3 py-2 text-white font-mono focus:outline-none focus:border-blue-500"
+                />
+              </div>
+
+              {/* Toggles */}
+              <div className="grid grid-cols-1 sm:grid-cols-3 gap-3 bg-slate-950 p-3.5 rounded-xl border border-slate-800">
+                <label className="flex items-center space-x-2 cursor-pointer">
+                  <input
+                    type="checkbox"
+                    checked={cryptoFormData.depositEnabled}
+                    onChange={(e) => setCryptoFormData({ ...cryptoFormData, depositEnabled: e.target.checked })}
+                    className="w-4 h-4 rounded text-blue-600 focus:ring-0 cursor-pointer"
+                  />
+                  <span className="font-medium text-slate-300">Deposit Enabled</span>
+                </label>
+                <label className="flex items-center space-x-2 cursor-pointer">
+                  <input
+                    type="checkbox"
+                    checked={cryptoFormData.withdrawalEnabled}
+                    onChange={(e) => setCryptoFormData({ ...cryptoFormData, withdrawalEnabled: e.target.checked })}
+                    className="w-4 h-4 rounded text-blue-600 focus:ring-0 cursor-pointer"
+                  />
+                  <span className="font-medium text-slate-300">Withdrawal Enabled</span>
+                </label>
+                <label className="flex items-center space-x-2 cursor-pointer">
+                  <input
+                    type="checkbox"
+                    checked={cryptoFormData.isEnabled}
+                    onChange={(e) => setCryptoFormData({ ...cryptoFormData, isEnabled: e.target.checked })}
+                    className="w-4 h-4 rounded text-blue-600 focus:ring-0 cursor-pointer"
+                  />
+                  <span className="font-bold text-white">Active Coin</span>
+                </label>
+              </div>
+
+              <div className="flex gap-2 pt-3 border-t border-slate-800">
+                <button
+                  type="submit"
+                  className="flex-1 bg-gradient-to-r from-blue-600 to-sky-600 hover:from-blue-500 hover:to-sky-500 text-white font-bold py-2.5 rounded-xl transition cursor-pointer shadow-lg shadow-blue-600/25"
+                >
+                  Save Cryptocurrency Values
+                </button>
+                <button
+                  type="button"
+                  onClick={() => setCryptoModalOpen(false)}
+                  className="flex-1 bg-slate-800 hover:bg-slate-700 text-slate-300 font-medium py-2.5 rounded-xl transition cursor-pointer"
+                >
+                  Cancel
+                </button>
+              </div>
+            </form>
+          </div>
+        </div>
+      )}
+
+      {/* Approval Modal */}
+      {approveModalOpen && selectedTxn && (
+        <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-black/80 backdrop-blur-sm animate-fade-in text-white">
+          <div className="bg-slate-900 border border-slate-700 max-w-md w-full rounded-2xl p-6 shadow-2xl space-y-4">
+            <h3 className="font-bold text-white font-mono text-base flex items-center space-x-2">
+              <Check className="w-5 h-5 text-emerald-400" />
+              <span>APPROVE TRANSACTION #{selectedTxn.orderId}</span>
+            </h3>
+            <p className="text-xs text-slate-300">
+              Confirming this will mark the order as <span className="text-emerald-400 font-bold uppercase">COMPLETED</span> and send an instant notification to the user.
+            </p>
+
+            <div className="bg-slate-950 p-3 rounded-xl border border-slate-800 text-xs font-mono space-y-1">
+              <div>Customer: {selectedTxn.userEmail}</div>
+              <div>Sending: {selectedTxn.toAmount} {selectedTxn.toCurrency}</div>
+              <div>Account: {selectedTxn.userReceiveAccount || 'N/A'}</div>
+            </div>
+
+            <div>
+              <label className="block text-xs font-semibold text-slate-400 mb-1">Admin Notes (Optional)</label>
+              <input
+                type="text"
+                value={approvalNotes}
+                onChange={(e) => setApprovalNotes(e.target.value)}
+                placeholder="e.g. Funds dispatched via bKash TrxID #827192"
+                className="w-full bg-slate-950 border border-slate-700 rounded-xl px-3 py-2 text-xs text-white focus:outline-none"
+              />
+            </div>
+
+            <div className="flex gap-2 pt-2">
+              <button
+                onClick={handleApprove}
+                className="flex-1 bg-emerald-600 hover:bg-emerald-500 text-white font-bold py-2 rounded-xl text-xs transition cursor-pointer"
+              >
+                Confirm Approval
+              </button>
+              <button
+                onClick={() => setApproveModalOpen(false)}
+                className="flex-1 bg-slate-800 hover:bg-slate-700 text-slate-300 py-2 rounded-xl text-xs transition cursor-pointer"
+              >
+                Cancel
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* Reject Modal */}
+      {rejectModalOpen && selectedTxn && (
+        <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-black/80 backdrop-blur-sm animate-fade-in text-white">
+          <div className="bg-slate-900 border border-slate-700 max-w-md w-full rounded-2xl p-6 shadow-2xl space-y-4">
+            <h3 className="font-bold text-white font-mono text-base flex items-center space-x-2">
+              <AlertTriangle className="w-5 h-5 text-rose-400" />
+              <span>REJECT TRANSACTION #{selectedTxn.orderId}</span>
+            </h3>
+            <p className="text-xs text-slate-300">
+              Please enter the specific reason for rejecting this transaction. The user will be notified.
+            </p>
+
+            <div>
+              <label className="block text-xs font-semibold text-slate-400 mb-1">Rejection Reason *</label>
+              <textarea
+                rows={3}
+                required
+                value={rejectionReason}
+                onChange={(e) => setRejectionReason(e.target.value)}
+                placeholder="e.g. Invalid payment transaction ID or funds not received in our bKash/Binance wallet."
+                className="w-full bg-slate-950 border border-slate-700 rounded-xl px-3 py-2 text-xs text-white focus:outline-none focus:border-rose-500"
+              />
+            </div>
+
+            <div className="flex gap-2 pt-2">
+              <button
+                onClick={handleReject}
+                className="flex-1 bg-rose-600 hover:bg-rose-500 text-white font-bold py-2 rounded-xl text-xs transition cursor-pointer"
+              >
+                Confirm Rejection
+              </button>
+              <button
+                onClick={() => setRejectModalOpen(false)}
+                className="flex-1 bg-slate-800 hover:bg-slate-700 text-slate-300 py-2 rounded-xl text-xs transition cursor-pointer"
+              >
+                Cancel
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
+    </div>
+  );
+};
